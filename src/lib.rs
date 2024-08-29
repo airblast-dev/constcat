@@ -262,9 +262,10 @@ macro_rules! _concat_slices {
             $({
                 let mut i = 0;
                 while i < $s.len() {
-                    // Ideally this should use `MaybeUninit::write` once it is made const.
-                    // The write method mentioned above: https://doc.rust-lang.org/core/mem/union.MaybeUninit.html#method.write
-                    // It's relevant github issue: https://github.com/rust-lang/rust/issues/62061
+                    // Ideally this should use `MaybeUninit::write` once it is
+                    // made const.
+                    // Documentation: https://doc.rust-lang.org/core/mem/union.MaybeUninit.html#method.write
+                    // Tracking issue: https://github.com/rust-lang/rust/issues/63567
                     arr[base + i] = MaybeUninit::new($s[i]);
                     i += 1;
                 }
@@ -272,18 +273,21 @@ macro_rules! _concat_slices {
             })*
             if base != LEN { panic!("invalid length"); }
 
-            // SAFETY: Transmuting an array of initialized MaybeUninit's is completely safe, where
-            // all of its items are initialized.
-            // As per the documentation of `core::mem::MaybeUninit`: "https://doc.rust-lang.org/core/mem/union.MaybeUninit.html#layout-1"
-            // This means it is safe to transmute, as the slices must be the same type in order to
-            // be placed in the array. In such case the user does provide slices with different
-            // types, it would give a compile error before even reaching the unsafe block.
+            // SAFETY:
+            // As per the documentation of `core::mem::MaybeUninit`:
+            // <https://doc.rust-lang.org/core/mem/union.MaybeUninit.html#layout-1>
             //
-            // The only way it would be UB is where `base` and the array length (`LEN`) is
-            // different, as it would end up assuming the non-initialized items do exist.
-            // Mentioned case is handled above as a comp time panic above.
+            // MaybeUninit<T> is guaranteed to have the same size, alignment, and ABI as T.
             //
-            // See for more information: https://doc.rust-lang.org/core/mem/union.MaybeUninit.html#initializing-an-array-element-by-element
+            // This means as long as all of the MaybeUninits are initialized
+            // then it is safe to transmute a MaybeUninit<T> to T, and therefore
+            // also [MaybeUninit<T>; N] to [T; N]. We know that all of the
+            // elements are initialized because in the loop above the number of
+            // initialized elements are computed and then there is a guard that
+            // compares that to the total length of the array.
+            //
+            // See for more information:
+            // https://doc.rust-lang.org/core/mem/union.MaybeUninit.html#initializing-an-array-element-by-element
             unsafe { $crate::core::mem::transmute(arr) }
         };
         &ARR
